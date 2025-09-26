@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Lecteur HLS avec renouvellement</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background: #111;
+      color: #eee;
+    }
+    video {
+      width: 100%;
+      max-width: 800px;
+      height: auto;
+      background: #000;
+    }
+    #status {
+      margin-top: 10px;
+      font-family: monospace;
+      color: #0f0;
+    }
+  </style>
+</head>
+<body>
+  <h2>Lecteur HLS avec renouvellement automatique</h2>
+  <video id="videoPlayer" controls></video>
+  <div id="status">[...] Chargement du flux</div>
+
+  <!-- Hls.js -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+
+  <script>
+    const video = document.getElementById('videoPlayer');
+    const statusDiv = document.getElementById('status');
+    let hls;
+
+    function log(msg) {
+      statusDiv.textContent = msg;
+      console.log(msg);
+    }
+
+    function loadHlsStream(url) {
+      log("🔄 Chargement du flux...");
+
+      if (Hls.isSupported()) {
+        if (hls) hls.destroy(); // Détruire l'instance précédente
+
+        hls = new Hls();
+        hls.loadSource(url);
+        hls.attachMedia(video);
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          log("✅ Manifest HLS chargé.");
+          video.play()
+            .then(() => log("▶️ Lecture démarrée."))
+            .catch(e => {
+              log("🔇 Lecture bloquée (interaction requise).");
+              video.muted = true;
+              video.play()
+                .then(() => log("🔇 Lecture en sourdine."))
+                .catch(e => log("❌ Impossible de lire : " + e.message));
+            });
+        });
+
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          log("❌ Erreur HLS : " + data.details);
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                log("📡 Erreur réseau. Tentative de rechargement...");
+                hls.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                log("🎞️ Erreur média. Tentative de récupération...");
+                hls.recoverMediaError();
+                break;
+              default:
+                log("💥 Erreur fatale. Arrêt du lecteur.");
+                hls.destroy();
+                break;
+            }
+          }
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Pour Safari
+        video.src = url;
+        video.addEventListener('loadedmetadata', () => {
+          log("✅ Flux chargé (Safari).");
+          video.play().catch(e => log("🔇 Lecture bloquée : " + e.message));
+        });
+      } else {
+        log("🚫 Navigateur non supporté.");
+      }
+    }
+
+    // URL du flux HLS avec token
+    const streamUrl = "https://v3.vidzy.org/hls2/04/00021/d4kgdzcyz3ge_n/index-v1-a1.m3u8?t=O_6_KEhiMgcvGonOIxdr6F67CNsnUzBE-WYAywTJ7Do&s=1758821604&e=172800&f=106425&i=0.0&sp=0";
+
+    // Charger le flux au démarrage
+    loadHlsStream(streamUrl);
+
+    // Renouveler l’URL toutes les 60 secondes
+    setInterval(() => {
+      log("🔁 Rechargement du flux...");
+      loadHlsStream(streamUrl);
+    }, 60000); // 60 secondes
+  </script>
+</body>
+</html>
